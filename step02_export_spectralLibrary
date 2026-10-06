@@ -1,0 +1,159 @@
+// TRAINING SAMPLE SPECTRAL SIGNATURE EXTRACTION
+
+// This script reads filtered training samples for a selected classification region.
+// It balances the number of samples per class, extracts Landsat spectral and terrain
+// variables for each target year, and exports one annual spectral library asset per year.
+
+// Set input parameters.
+var sample_folder = 'projects/mapbiomas-drc/assets/LAND-COVER/COLLECTION-1/GENERAL/SAMPLES';
+var sample_file_name_in = 'filteredSamples';
+var region_name = 'Humid';
+var version_in = '11';
+
+// Define the spectral and terrain bands to be extracted from the Landsat mosaics
+var bands = [
+  'red_median','green_stdDev','green_median','blue_median',
+  'nir_median','swir1_median','swir2_median',
+  'evi2_median_dry','evi2_median_wet','evi2_stdDev',
+  'ndvi_median_dry','ndvi_median_wet','ndvi_stdDev',
+  'ndwi_median_dry','ndwi_median_wet','ndwi_stdDev',
+  'slope'
+];
+
+// Set output parameters
+var sample_file_name_out = 'filteredSamples_spectralLib';
+var version_out = '11';
+
+// Set the maximum number of spectral signatures to be extracted per class
+var nSize = 5000;
+
+// Define the years to be processed
+var years = [
+  2000, 2001, 2002, 2003, 2004, 2005, 2006, 2007, 2008,
+  2009, 2010, 2011, 2012, 2013, 2014, 2015, 2016, 2017,
+  2018, 2019, 2020, 2021, 2022, 2023, 2024, 2025
+];
+
+// Read the classification region selected for training
+var regions = ee.FeatureCollection(
+  'projects/mapbiomas-drc/assets/LAND-COVER/COLLECTION-1/GENERAL/SAMPLES/drc_regions_training'
+).filterMetadata('name', 'equals', region_name);
+  
+// Load the Landsat mosaic collection
+var Land_collection = ee.ImageCollection('projects/nexgenmap/MapBiomas2/LANDSAT/DRC/mosaics-2');
+
+// Define visualization parameters for the Landsat mosaics
+var visLandsat = {
+  "bands": ["swir1_median", "nir_median", "red_median"],
+  "min": 0, "max": 5615, "gamma":1
+  };
+
+// Show the Landsat mosaic for the first year of the temporal series 
+Map.addLayer(Land_collection.filter(ee.Filter.eq('year', 2000)).filterBounds(regions), visLandsat, 'Landsat 2000');
+Map.addLayer(Land_collection.filter(ee.Filter.eq('year', 2025)).filterBounds(regions), visLandsat, 'Landsat 2025');
+
+// Show the selected classification region
+Map.addLayer(regions, {}, region_name + ' region');
+
+// Read the filtered training samples - Generated in step01
+var points = ee.FeatureCollection(
+  sample_folder + '/' + sample_file_name_in + '_' + region_name + '_v' + version_in
+);
+
+// Count the number of samples per class in the original dataset
+var classCounts = points.reduceColumns({
+  selectors: ['class'],
+  reducer: ee.Reducer.frequencyHistogram()
+});
+
+print('Number of training samples per class', classCounts);
+
+// Get the list of distinct class values available in the training dataset
+var classes = points.aggregate_array('class').distinct();
+
+// Define a function to randomly select a fixed maximum number of samples per class
+var samplePerClass = function(classValue) {
+  classValue = ee.Number(classValue);
+  
+  // Set the maximum sample size for the class: for major classes, nSize for others
+  var sampleSize = nSize;
+  
+  sampleSize = ee.Number(sampleSize);
+
+  // Filter samples by class, randomize their order, and limit the sample size
+  var classSubset = points
+    .filter(ee.Filter.eq('class', classValue))
+    .randomColumn('random')
+    .sort('random')
+    .limit(sampleSize);
+    
+  return classSubset;
+};
+
+// Apply the class-level sampling function and merge all selected samples
+var balancedCollection = ee.FeatureCollection(
+  classes.map(samplePerClass)
+).flatten();
+
+// Count the number of samples per class after balancing
+var classCounts = balancedCollection.reduceColumns({
+  selectors: ['class'],
+  reducer: ee.Reducer.frequencyHistogram()
+});
+
+// Load the MapBiomas color palette used to style the training samples
+var paletteMapBiomas = require('users/mapbiomas/modules:Palettes.js').get('classification8');
+
+// Style each training sample according to its class value
+var newSamplesStyled = balancedCollection.map(
+    function (feature) {
+        return feature.set('style', {
+            'color': ee.List(paletteMapBiomas)
+                .get(feature.get('class')),
+            'width': 1,
+        });
+    }
+).style(
+    {
+        'styleProperty': 'style'
+    }
+);
+
+// Display the balanced training samples
+Map.addLayer(newSamplesStyled, {}, 'Balanced trainingSamples');
+
+print('Number of training samples balanced', classCounts);
+
+// Loop through each year and extract annual spectral signatures
+years.forEach(
+  function (year) {
+    
+    // Get the Landsat mosaic for the current year
+    var img_year = Land_collection.filter(ee.Filter.eq('year', year));
+    
+    // Extract spectral and terrain information for the balanced training samples
+    var trainedSamples = img_year
+      .mosaic()
+      .select(bands)
+      .sampleRegions({
+        collection: balancedCollection, 
+        scale: 30,
+        geometries: true
+      });
+    
+     // Remove samples with missing values in the reference spectral band
+    trainedSamples = trainedSamples.filter(ee.Filter.notNull(['red_median']));
+    
+    // Add the year as an attribute to each extracted sample
+    trainedSamples = trainedSamples.map(function(f) {return f.set('year', year)});
+
+    // Export the annual spectral library to a Google Earth Engine asset.
+    Export.table.toAsset({
+      collection: trainedSamples, 
+      description: sample_file_name_out + '_' + region_name + '_'+ year + '_v' + version_out, 
+      assetId: sample_folder + '/' + sample_file_name_out + '_' + region_name + '_' + year + '_v' + version_out,
+    });
+  }
+);
+
+
