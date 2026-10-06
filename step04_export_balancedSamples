@@ -1,0 +1,246 @@
+// STABLE PIXEL SAMPLE EXTRACTION
+
+// This script uses the stable pixel map generated in the previous step to
+// automatically create a new set of training samples. It calculates the area
+// of each stable class, builds a proportional sampling plan with a minimum
+// number of samples per class, extracts stratified sample points, retrieves
+// annual Landsat spectral values, and exports one training sample asset per year.
+
+// Define the country name
+var country_name = 'DRC'; 
+
+// Define the classification region name
+var region_name = 'Humid';
+
+// Define the total target sample size and the minimum number of samples per class
+var sampleSize = 8000;
+var minimumSize = 800;
+
+// Define the years to be processed
+var years = [
+  2000, 2001, 2002, 2003, 2004, 2005, 2006, 2007, 2008, 2009,
+  2010, 2011, 2012, 2013, 2014, 2015, 2016, 2017, 2018,
+  2019, 2020, 2021, 2022, 2023, 2024, 2025
+];
+           
+// Define the folder where the stable pixel map was stored.
+var sample_folder = 'projects/mapbiomas-drc/assets/LAND-COVER/COLLECTION-1/GENERAL/SAMPLES/';
+
+// Define the input stable pixel map name and version
+var stable_file_name_in = 'Stable_Map_2ndWS'; 
+var stable_version_in = '11'; 
+
+// Define the output stable sample file name and version
+var stable_samples_name_out = 'Stable_Sample_2ndWS';
+var stable_samples_version_out = '11';
+
+// Read the DRC classification regions.
+var region_training = ee.FeatureCollection(
+  'projects/mapbiomas-drc/assets/LAND-COVER/COLLECTION-1/GENERAL/SAMPLES/drc_regions_training'
+);
+
+// Print the available classification region names.
+print(region_training.aggregate_array('name'));
+
+// Filter the classification regions to select only the region of interest.
+var region_limit = region_training
+  .filter(ee.Filter.eq('name', region_name));
+
+// Show the selected region of interest
+Map.addLayer(region_limit, {}, 'Region', false);
+
+// Load the MapBiomas palette module for visualization
+var palettes = require('users/mapbiomas/modules:Palettes.js');
+
+// Define visualization parameters for the land use and land cover classes
+var visLULC = {'min': 0,'max': 69,'palette': palettes.get('classification9')};
+
+// Load the Landsat mosaic collection for the DRC
+var Land_collection = ee.ImageCollection('projects/nexgenmap/MapBiomas2/LANDSAT/DRC/mosaics-2');
+
+// Define visualization parameters for the Landsat mosaics
+var visLandsat = {"bands": ["swir1_median", "nir_median", "red_median"],
+  "min": 0, "max": 5615, "gamma":1};
+
+// Show the Landsat mosaic for the last year of the temporal series.
+Map.addLayer(Land_collection.filter(ee.Filter.eq('year', 2025)).filterBounds(region_limit), visLandsat, 'Landsat 2025', false);
+
+// Define the full asset path for the stable pixel map
+var stableName = sample_folder + country_name + '_' + stable_file_name_in + '_' + region_name+ '_v' + stable_version_in;
+
+// Read the stable pixel map and rename the classification band
+var stable = ee.Image(stableName).rename('class');
+
+// Show the stable pixel map.
+Map.addLayer(stable, visLULC,'Stable', true);
+
+// Define the analysis scale to match the Landsat mosaic spatial resolution.
+var scale = 30;
+
+// Create a pixel area image in hectares - ha
+var pixelAreaHa = ee.Image.pixelArea().divide(10000);
+
+// Mask no-data pixels in the stable pixel map
+var stableMasked = stable.updateMask(stable.neq(0));
+
+// Calculate the stable pixel area by class
+var areaByClass = pixelAreaHa
+  .addBands(stableMasked)
+  .reduceRegion({
+    reducer: ee.Reducer.sum().group({
+      groupField: 1,   // index of the class band
+      groupName: 'class'
+    }),
+    geometry: region_limit.geometry(),
+    scale: scale,
+    maxPixels: 1e13,
+    tileScale: 8
+  });
+
+// Extract the grouped area results
+var groups = ee.List(areaByClass.get('groups'));
+
+// Calculate the total stable area across all classes
+var totalArea = ee.Number(
+  groups.map(function(g) {
+    return ee.Dictionary(g).get('sum');
+  }).reduce(ee.Reducer.sum())
+);
+
+// Build the initial per-class sampling plan using proportional allocation
+var samplingPlan = ee.FeatureCollection(
+  groups.map(function(g) {
+    g = ee.Dictionary(g);
+    
+    // Get the class value and its stable area
+    var cls = ee.Number(g.get('class'));
+    var area = ee.Number(g.get('sum'));
+
+     // Calculate the proportional number of samples based on class area
+    var proportional = area.divide(totalArea).multiply(sampleSize);
+
+    // Enforce the minimum number of samples per class
+    var nSamples = proportional.max(minimumSize).round();
+
+    return ee.Feature(null, {
+      'class': cls,
+      'area_ha': area,
+      'n_samples_raw': proportional,
+      'n_samples': nSamples
+    });
+  })
+);
+
+//print('Initial sampling plan:', samplingPlan);
+
+// Calculate the total number of samples allocated in the initial plan
+var allocatedTotal = ee.Number(
+  samplingPlan.aggregate_sum('n_samples')
+);
+
+// Calculate the number of samples exceeding the target sample size
+var excess = allocatedTotal.subtract(sampleSize);
+
+// Identify the number of reducible samples for each class
+var adjustedPlan = ee.FeatureCollection(
+  samplingPlan.map(function(f) {
+    var n = ee.Number(f.get('n_samples'));
+    var cls = f.get('class');
+
+    // Only samples above the minimum class size can be reduced
+    var reducible = n.subtract(minimumSize).max(0);
+
+    return f.set({
+      'reducible': reducible
+    });
+  })
+);
+
+// Calculate the total number of samples that can be reduced
+var totalReducible = ee.Number(adjustedPlan.aggregate_sum('reducible'));
+
+// Apply a proportional reduction to classes above the minimum sample size
+var finalPlan = ee.FeatureCollection(
+  adjustedPlan.map(function(f) {
+    var n = ee.Number(f.get('n_samples'));
+    var reducible = ee.Number(f.get('reducible'));
+
+    // Calculate the class-specific reduction based on its reducible sample count
+    var reduction = ee.Algorithms.If(
+      totalReducible.gt(0),
+      reducible.divide(totalReducible).multiply(excess),
+      0
+    );
+
+    // Calculate the final number of samples for the class
+    var finalN = n.subtract(ee.Number(reduction)).round();
+
+    return f
+      .set('n_samples_final', finalN)
+      .select(['class', 'n_samples_final']);
+  })
+);
+
+// Print the final class-level sampling plan
+print('Final sampling plan:', finalPlan);
+
+// Convert the final sampling plan into class values and class sample targets
+var classValues = finalPlan.aggregate_array('class');
+var classPoints = finalPlan.aggregate_array('n_samples_final');
+
+// Generate stratified sample points from the stable pixel map
+var points = stableMasked.stratifiedSample({
+  numPoints: 0, // ignored when classPoints is provided
+  classBand: 'class',
+  region: region_limit.geometry(),
+  scale: scale,
+  classValues: classValues,
+  classPoints: classPoints,
+  geometries: true,
+  tileScale: 4
+});
+
+// Display the generated stable sample points
+Map.addLayer(points, {color: 'yellow'}, 'Samples', true);
+
+// Loop through each year and extract annual spectral values for the stable samples
+years.forEach(function (year) {
+
+  // Read the Landsat mosaic for the current year
+  var img_year = Land_collection
+    .filter(ee.Filter.eq('year', year))
+    .mosaic();
+
+  // Extract Landsat band values at the stable sample points
+  var trainedSamples = img_year.reduceRegions({
+    collection: points,   
+    reducer: ee.Reducer.first(),
+    scale: 30,
+    tileScale: 8
+  });
+
+  // Remove samples with missing spectral values
+  trainedSamples = trainedSamples.filter(
+    ee.Filter.notNull(['red_median'])
+  );
+
+  // Add metadata attributes to each sample
+  trainedSamples = trainedSamples.map(function (f) {
+    return f
+      .set('year', year)
+      .set('region', region_name)
+      .set('country', country_name);
+  });
+
+  // Define the annual output asset name
+  var out_name = 'filteredSamples_spectralLib_2ndWS_' +
+    region_name + '_' + year + '_v' + stable_samples_version_out;
+
+  // Export the annual stable spectral library to a Google Earth Engine asset
+  Export.table.toAsset({
+    collection: trainedSamples,
+    description: out_name,
+    assetId: sample_folder + out_name
+  });
+
+});
