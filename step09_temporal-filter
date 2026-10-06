@@ -1,0 +1,294 @@
+// TEMPORAL FILTER
+
+// This filter removes short temporal inconsistencies from the annual classification series.
+// It first applies a general 4-year window filter and then applies a class-specific 3-year window filter using a priority class list.
+// Then it corrects the first year of the series when the next two years are stable.
+
+// Set the country name used in the input and output image names.
+var country_name = 'DRC';
+
+// Set the region name used in the input and output image names.
+var region_name = 'Humid';
+
+// Set the input transition filter version.
+var transition_version_in = '2';
+
+// Set the output temporal filter version.
+var temporal_version_out = '2';
+
+// Set the year used only for map visualization.
+var visYear = 2000;
+
+// Set the first year of the temporal series.
+var startYear = 2000;
+
+// Set the last year of the temporal series.
+var endYear = 2025;
+
+// Set the class priority order for the 3-year temporal filter.
+var temporalClasses = [34, 33, 25, 24, 9, 21, 5, 66, 4, 3];
+
+// Set the input ImageCollection path containing the transition-filtered images.
+var inputCollectionPath = 'projects/mapbiomas-drc/assets/LAND-COVER/COLLECTION-1/GENERAL/classification-ft_2ndWS';
+
+// Set the output ImageCollection path for the temporal-filtered images.
+var outputCollectionPath = 'projects/mapbiomas-drc/assets/LAND-COVER/COLLECTION-1/GENERAL/classification-ft_2ndWS';
+
+// Load the MapBiomas color palette module.
+var palettes = require('users/mapbiomas/modules:Palettes.js');
+
+// Define visualization parameters for the selected classification year.
+var vis = {
+  bands: ['classification_' + visYear],
+  min: 0,
+  max: 69,
+  palette: palettes.get('classification9')
+};
+
+// Create a client-side list of years from the start year to the end year.
+var makeYearList = function(startYear, endYear) {
+  var years = [];
+
+  // Add each year to the list.
+  for (var year = startYear; year <= endYear; year++) {
+    years.push(year);
+  }
+
+  // Return the complete year list.
+  return years;
+};
+
+// Create the standard classification band name for each year.
+var getBandName = function(year) {
+  return 'classification_' + year;
+};
+
+// Create the input image name.
+var getInputImageName = function(country, region, transitionVersion) {
+  return country + '_classification_' + region + '_gapfill_transition_v' + transitionVersion;
+};
+
+// Create the output image name.
+var getOutputImageName = function(country, region, transitionVersion, temporalVersion) {
+  return country + '_classification_' + region + '_gapfill_transition_temporal_v' + temporalVersion;
+};
+
+// Define the full list of years to be processed.
+var years = makeYearList(startYear, endYear);
+
+// Create the expected list of classification band names.
+var bandNames = years.map(function(year) {
+  return getBandName(year);
+});
+
+// Create the transition-filtered input image name.
+var inputImageName = getInputImageName(country_name, region_name, transition_version_in);
+
+// Create the temporal-filtered output image name.
+var outputImageName = getOutputImageName(country_name, region_name, transition_version_in, temporal_version_out);
+
+// Load the transition-filtered multiband classification image.
+var classificationInput = ee.Image(inputCollectionPath + '/' + inputImageName).select(bandNames).byte();
+
+// Print the input image for inspection.
+print('Input classification', classificationInput);
+
+// Print the input band names for inspection.
+print('Input bands', classificationInput.bandNames());
+
+// Display the input classification for the selected visualization year.
+Map.addLayer(classificationInput, vis, 'Before temporal filter - ' + region_name + ' - ' + visYear, false);
+
+// Apply the general 4-year temporal window filter to one year.
+var applyFourYearFilter = function(image, year) {
+  // Create the current year band name.
+  var currentBandName = getBandName(year);
+
+  // Select the previous year classification.
+  var previous = image.select(getBandName(year - 1));
+
+  // Select the current year classification.
+  var current = image.select(currentBandName);
+
+  // Select the next year classification.
+  var next = image.select(getBandName(year + 1));
+
+  // Select the year after the next year classification.
+  var next2 = image.select(getBandName(year + 2));
+
+  // Identify a 4-year A-B-B-A pattern.
+  var fourYearMask = previous.eq(next2)
+                             .and(current.eq(next))
+                             .and(current.neq(previous));
+
+  // Replace the current year with the previous year when the 4-year inconsistency is detected.
+  var corrected = current.where(fourYearMask, previous).rename(currentBandName).byte();
+
+  // Return the corrected current year band.
+  return corrected;
+};
+
+// Apply the general 4-year temporal filter across the temporal series.
+var window4Years = function(image) {
+  // Create the list of years that have a complete 4-year window.
+  var filterYears = makeYearList(startYear + 1, endYear - 2);
+
+  // Create a list of corrected annual bands.
+  var correctedBands = years.map(function(year) {
+    // Keep edge years and the last two years unchanged because they do not have a complete 4-year window.
+    if (year <= startYear || year >= endYear - 1) {
+      return image.select(getBandName(year)).rename(getBandName(year)).byte();
+    }
+
+    // Apply the 4-year temporal correction to the current year.
+    return applyFourYearFilter(image, year);
+  });
+
+  // Convert the corrected annual band list into a multiband image.
+  var filtered = ee.ImageCollection.fromImages(correctedBands).toBands().rename(bandNames).byte();
+
+  // Return the 4-year filtered image.
+  return filtered;
+};
+
+// Apply the class-specific 3-year temporal window filter to one year.
+var applyThreeYearFilterByClass = function(image, year, classValue) {
+  // Create the current year band name.
+  var currentBandName = getBandName(year);
+
+  // Select the previous year classification.
+  var previous = image.select(getBandName(year - 1));
+
+  // Select the current year classification.
+  var current = image.select(currentBandName);
+
+  // Select the next year classification.
+  var next = image.select(getBandName(year + 1));
+
+  // Identify pixels where the target class appears only in the current year.
+  var isolatedClassMask = previous.neq(classValue).and(current.eq(classValue)).and(next.neq(classValue));
+
+  // Replace the isolated target class with the previous year's class.
+  var corrected = current.where(isolatedClassMask, previous).rename(currentBandName).byte();
+
+  // Return the corrected current year band.
+  return corrected;
+};
+
+// Apply the class-specific 3-year temporal filter for one target class.
+var window3YearsByClass = function(image, classValue) {
+  // Create a list of corrected annual bands for the selected class.
+  var correctedBands = years.map(function(year) {
+    // Keep edge years unchanged because they do not have a complete 3-year window.
+    if (year === startYear || year === endYear) {
+      return image.select(getBandName(year)).rename(getBandName(year)).byte();
+    }
+
+    // Apply the 3-year temporal correction to the selected class.
+    return applyThreeYearFilterByClass(image, year, classValue);
+  });
+
+  // Convert the corrected annual band list into a multiband image.
+  var filtered = ee.ImageCollection.fromImages(correctedBands).toBands().rename(bandNames).byte();
+
+  // Return the 3-year filtered image for the selected class.
+  return filtered;
+};
+
+// Apply the general 4-year temporal filter before the class-specific filters.
+var filtered = window4Years(classificationInput);
+
+// Apply the first-year temporal correction for one target class.
+var applyFirstYearFilterByClass = function(image, classValue) {
+  // Create the first year band name.
+  var firstBandName = getBandName(startYear);
+
+  // Select the first year classification.
+  var first = image.select(firstBandName);
+
+  // Select the second year classification.
+  var second = image.select(getBandName(startYear + 1));
+
+  // Select the third year classification.
+  var third = image.select(getBandName(startYear + 2));
+
+  // Identify pixels where the first year is different from the target class,
+  // but the next two years are stable as the target class.
+  var firstYearMask = first
+    .neq(classValue)
+    .and(second.eq(classValue))
+    .and(third.eq(classValue));
+
+  // Replace the first year with the target class when the temporal pattern is detected.
+  var correctedFirst = first
+    .where(firstYearMask, classValue)
+    .rename(firstBandName)
+    .byte();
+
+  // Overwrite only the first-year band and keep all other bands unchanged.
+  var filtered = image
+    .addBands(correctedFirst, null, true)
+    .select(bandNames)
+    .byte();
+
+  // Return the image with the corrected first year.
+  return filtered;
+};
+
+// Apply the first-year temporal correction for one target class.
+var windowFirstYearByClass = function(image, classValue) {
+  // Skip the correction if the series does not have at least three years.
+  if (startYear + 2 > endYear) {
+    return image;
+  }
+
+  // Apply the first-year temporal correction to the selected class.
+  return applyFirstYearFilterByClass(image, classValue);
+};
+
+// Apply the general 4-year temporal filter first.
+var filtered = window4Years(classificationInput);
+
+// Apply the class-specific 3-year temporal filter following the priority class order.
+temporalClasses.forEach(function(classValue) {
+  filtered = window3YearsByClass(filtered, classValue);
+});
+
+// Apply the first-year temporal correction after the 3-year temporal filter.
+temporalClasses.forEach(function(classValue) {
+  filtered = windowFirstYearByClass(filtered, classValue);
+});
+
+// Store metadata in the temporal-filtered image.
+filtered = filtered
+  .set('country', country_name)
+  .set('region', region_name)
+  .set('version', temporal_version_out)
+  .set('transition_version', transition_version_in)
+  .set('filter', 'temporal')
+  .set('input_collection', inputCollectionPath)
+  .set('input_asset', inputImageName)
+  .set('output_collection', outputCollectionPath);
+
+// Print the output image for inspection.
+print('Output classification', filtered);
+
+// Print the output band names for inspection.
+print('Output bands', filtered.bandNames());
+
+// Display the temporal-filtered classification for the selected visualization year.
+Map.addLayer(filtered, vis, 'After temporal filter - ' + region_name + ' - ' + visYear, true);
+
+// Create the full output asset ID inside the output ImageCollection.
+var outputAssetId = outputCollectionPath + '/' + outputImageName;
+
+// Export one multiband temporal-filtered image for the selected region.
+Export.image.toAsset({
+  image: filtered,
+  description: outputImageName,
+  assetId: outputAssetId,
+  pyramidingPolicy: { '.default': 'mode' },
+  region: classificationInput.geometry(),
+  scale: 30,
+  maxPixels: 1e13
+});
