@@ -1,0 +1,418 @@
+var Forest = 
+    /* color: #088203 */
+    /* shown: false */
+    ee.FeatureCollection([]),
+    Mangrove = 
+    /* color: #1f4c13 */
+    /* shown: false */
+    ee.FeatureCollection([]),
+    Shrubland = 
+    /* color: #1eff2d */
+    /* shown: false */
+    ee.FeatureCollection([]),
+    Woodland = /* color: #34d67a */ee.FeatureCollection(
+        [ee.Feature(
+            ee.Geometry.Polygon(
+                [[[28.764164551834106, -5.325215608442435],
+                  [28.764164551834106, -5.322993638215003],
+                  [28.763177498916626, -5.32158353756005],
+                  [28.761503800491333, -5.320472546888448],
+                  [28.759915932754517, -5.320985312063127],
+                  [28.75905762586975, -5.32008797272699],
+                  [28.760216340164185, -5.317609600143454],
+                  [28.76004467878723, -5.31543033324774],
+                  [28.76055966291809, -5.314490254950865],
+                  [28.76184712324524, -5.315686717988747],
+                  [28.762490853408814, -5.316370410109547],
+                  [28.763520821670532, -5.316925909398714],
+                  [28.76356373701477, -5.315558525631588],
+                  [28.764507874588013, -5.3149602942786665],
+                  [28.76455078993225, -5.314020215264349],
+                  [28.764207467178345, -5.311798204618744],
+                  [28.76283417616272, -5.3091488737626715],
+                  [28.762447938064575, -5.3082515171817715],
+                  [28.762447938064575, -5.30654226293922],
+                  [28.761890038589478, -5.305345782151337],
+                  [28.759014710525513, -5.305345782151337],
+                  [28.757984742263794, -5.304362956911271],
+                  [28.756182297805786, -5.304491151596583],
+                  [28.755023583511353, -5.306029485742846],
+                  [28.755023583511353, -5.307012308328129],
+                  [28.753693207839966, -5.3068841141666665],
+                  [28.753178223709106, -5.306371337254456],
+                  [28.753650292495728, -5.305687634041802],
+                  [28.753693207839966, -5.305003930071476],
+                  [28.75330696974182, -5.303807446300589],
+                  [28.753478631118774, -5.30222637490287],
+                  [28.753221139053345, -5.301371740028935],
+                  [28.75262032423401, -5.300431640301368],
+                  [28.75163327131653, -5.299747930509737],
+                  [28.750903710464478, -5.299790662393892],
+                  [28.74905835066223, -5.300816226726536],
+                  [28.749015435317993, -5.30154266709836],
+                  [28.748800858596802, -5.302568228521177],
+                  [28.747642144302368, -5.303978372695597],
+                  [28.747685059646606, -5.304918467021919],
+                  [28.74781380567932, -5.30645680010276],
+                  [28.74656926069641, -5.30645680010276],
+                  [28.74631176863098, -5.307225965204667],
+                  [28.744981392959595, -5.307696010072536],
+                  [28.744938477615356, -5.309020680045356],
+                  [28.744208916763306, -5.310601734029271],
+                  [28.743736847976685, -5.313208327688338],
+                  [28.74480973158264, -5.314404793216353],
+                  [28.746998414138794, -5.314062946159771],
+                  [28.749916657546997, -5.314362062344657],
+                  [28.75111828718567, -5.315173948399992],
+                  [28.751676186660767, -5.315900371858033],
+                  [28.75086079512024, -5.316114025653212],
+                  [28.749487504104614, -5.315643987205979],
+                  [28.747942551712036, -5.315643987205979],
+                  [28.746183022598267, -5.315259410027766],
+                  [28.745496377090454, -5.315943102623002],
+                  [28.74785672102356, -5.317737792073566],
+                  [28.74607324727116, -5.319181376418958],
+                  [28.74577283986149, -5.321958855165159],
+                  [28.74607324727116, -5.323710796847024],
+                  [28.744957448320964, -5.325291813104179],
+                  [28.74577283986149, -5.327684694839066],
+                  [28.746416570025065, -5.3295648096645625],
+                  [28.743970395403483, -5.3314449187347295],
+                  [28.74302625783024, -5.333453210700121],
+                  [28.74551534779606, -5.336657918310178],
+                  [28.749463559465983, -5.337427045645467],
+                  [28.75083685048161, -5.338837109921489],
+                  [28.751094342547038, -5.339905338274704],
+                  [28.753626347857097, -5.342255434098575],
+                  [28.760106564837077, -5.341016293787297],
+                  [28.76255273945866, -5.338965297422156],
+                  [28.764870168047526, -5.337897067431084],
+                  [28.764955998736003, -5.328667482852012],
+                  [28.764698506670573, -5.326744635268712]]]),
+            {
+              "system:index": "0"
+            }),
+        ee.Feature(
+            ee.Geometry.Polygon(
+                [[[28.741506100166934, -5.300301520960922],
+                  [28.741677761543887, -5.298720440586188],
+                  [28.742192745674746, -5.297096624097467],
+                  [28.743995190132754, -5.297011159953532],
+                  [28.746655941475527, -5.297737604800167],
+                  [28.747900486458438, -5.298549512735708],
+                  [28.748758793343203, -5.298164924899251],
+                  [28.74863004731049, -5.296626571159589],
+                  [28.746183872688906, -5.294532694638927],
+                  [28.745025158394473, -5.293678049123059],
+                  [28.744038105476992, -5.291541430166066],
+                  [28.74287939118256, -5.289447536428539],
+                  [28.74163484619965, -5.288635616542394],
+                  [28.73983240174164, -5.287481833819523],
+                  [28.738974094856875, -5.287652764728972],
+                  [28.738201618660586, -5.287951893706952],
+                  [28.734425068367617, -5.288635616542394],
+                  [28.733180523384707, -5.289105675553668],
+                  [28.7328372006308, -5.290302187789489],
+                  [28.731549740303652, -5.290729513027321],
+                  [28.729790211189883, -5.289319338622596],
+                  [28.72863149689545, -5.288550151229262],
+                  [28.724940777290957, -5.2901739901606],
+                  [28.724297047127383, -5.29226788143957],
+                  [28.724468708504336, -5.293763513727805],
+                  [28.72391080902924, -5.29692569579779],
+                  [28.72811651276459, -5.298720440586188],
+                  [28.731506824959414, -5.3001733254056385],
+                  [28.733952999580996, -5.302096255940616],
+                  [28.740905285347598, -5.3023526462261446]]]),
+            {
+              "system:index": "1"
+            })]),
+    PastureAgriculture = 
+    /* color: #fffcb7 */
+    /* shown: false */
+    ee.FeatureCollection(
+        [ee.Feature(
+            ee.Geometry.Polygon(
+                [[[26.355969502148117, -4.665646392876554],
+                  [26.356827809032882, -4.664662610030912],
+                  [26.3563986555905, -4.663336639666975],
+                  [26.35738570850798, -4.661839573344455],
+                  [26.357771946606125, -4.660813011736856],
+                  [26.357729031261886, -4.659273166513974],
+                  [26.35884483021208, -4.658802657578648],
+                  [26.3598747984738, -4.657947185980482],
+                  [26.358973576244797, -4.657305581598896],
+                  [26.3584156767697, -4.656107918520659],
+                  [26.357686115917648, -4.655295217413468],
+                  [26.356956555065597, -4.654653610613146],
+                  [26.35661323231169, -4.6536270385159],
+                  [26.356055332836593, -4.652643238851116],
+                  [26.35566909473845, -4.652343821288955],
+                  [26.356269909557785, -4.651488341838304],
+                  [26.35566909473845, -4.6504617651257165],
+                  [26.354810787853683, -4.650333442931447],
+                  [26.35360915821501, -4.650590087296629],
+                  [26.352707935986007, -4.651488341838304],
+                  [26.35262210529753, -4.651958855664776],
+                  [26.352965428051437, -4.652899882374482],
+                  [26.353523327526535, -4.653883681680589],
+                  [26.353737904247726, -4.655252443644982],
+                  [26.353523327526535, -4.65572295495533],
+                  [26.353265835461105, -4.656535655568403],
+                  [26.35210712116667, -4.656492881875335],
+                  [26.35137756031462, -4.655551859969792],
+                  [26.35017593067595, -4.6552096698739005],
+                  [26.34940345447966, -4.654781932020014],
+                  [26.349575115856613, -4.653669812383187],
+                  [26.34837348621794, -4.6538409078263046],
+                  [26.347772671398605, -4.654781932020014],
+                  [26.3468714491696, -4.655038574763545],
+                  [26.346227719006027, -4.655551859969792],
+                  [26.344854427990402, -4.656107918520659],
+                  [26.344468189892257, -4.657305581598896],
+                  [26.343996121105636, -4.658802657578648],
+                  [26.343996121105636, -4.65978644862974],
+                  [26.345026089367355, -4.660684691430449],
+                  [26.345755650219406, -4.6611551991060205],
+                  [26.344596935924972, -4.66154015969715],
+                  [26.34494025867888, -4.662395626922372],
+                  [26.346571041759933, -4.663678825807008],
+                  [26.347601010021652, -4.665218661373903],
+                  [26.348716808971847, -4.666116897228472],
+                  [26.35069091480681, -4.66637353583297],
+                  [26.353265835461105, -4.666630174343629]]]),
+            {
+              "system:index": "0"
+            })]),
+    Urban = 
+    /* color: #b22d08 */
+    /* shown: false */
+    ee.FeatureCollection([]),
+    ForestPlantation = 
+    /* color: #7f793f */
+    /* shown: false */
+    ee.FeatureCollection([]),
+    OtherNonVegetated = 
+    /* color: #ff0000 */
+    /* shown: false */
+    ee.FeatureCollection([]),
+    Glacier = 
+    /* color: #00ffff */
+    /* shown: false */
+    ee.FeatureCollection([]),
+    Water = 
+    /* color: #0510ff */
+    /* shown: false */
+    ee.FeatureCollection([]);
+
+// STABLE SAMPLE CLASSIFICATION AND COMPLEMENTARY SAMPLE COLLECTION
+
+// This script uses stable training samples generated in the previous step,
+// combines them with auxiliary samples collected from manually drawn polygons,
+// and trains annual Random Forest classifiers. The resulting yearly
+// classifications are displayed on the map and exported as Google Earth Engine
+// assets. A sampling grid is also generated to support visual inspection and 
+// additional auxiliary sample collection.
+
+// Define the name of the country 
+var country_name = 'DRC';
+
+// Define the classification region name
+var region_name = 'Humid';
+
+// Define the input version of the stable sample collection - generated in step04
+var stable_samples_version_in = '11';   
+
+// Define the output version of the classification
+var classification_version_out = '11'; 
+
+// Define the years to be processed
+var years = [
+  2000, 2001, 2002, 2003, 2004, 2005, 2006, 2007, 2008,
+  2009, 2010, 2011, 2012, 2013, 2014, 2015, 2016, 2017,
+  2018, 2019, 2020, 2021, 2022, 2023, 2024, 2025
+];
+           
+// Define the number of trees used in the Random Forest classifier
+var ntree = 100;
+
+// Define the grid cell size in meters for visual inspection
+var gridSize = 100000; 
+
+// Define the predictor bands to be used in the classification.
+//
+// This list is currently not used directly because the classifier uses
+// Landsat_annual_mosaic.bandNames() as inputProperties.
+/*
+var bands = [
+  'red_median', 'green_median', 'blue_median',
+  'nir_median', 'swir1_median', 'swir2_median',
+  'evi2_median_dry', 'evi2_median_wet', 'evi2_stdDev',
+  'ndvi_median_dry', 'ndvi_median_wet', 'ndvi_stdDev',
+  'ndwi_median_dry', 'ndwi_median_wet', 'ndwi_stdDev',
+  'slope'
+];
+*/
+
+// Define a function to convert manually drawn polygons into random sample points
+var generatePoints = function(classValue, polygons, nPoints) {
+  
+  // Convert the input geometry or geometry collection into a FeatureCollection
+  polygons = ee.FeatureCollection(polygons);
+
+  // Check whether the polygon collection is empty
+  var isEmpty = polygons.size().eq(0);
+
+  // Generate random points inside the polygons and assign the class value
+  var points = ee.FeatureCollection(
+    ee.Algorithms.If(
+      isEmpty,
+      ee.FeatureCollection([]),  // return empty FC if class is empty
+      ee.FeatureCollection.randomPoints({
+        region: polygons.geometry(),
+        points: nPoints,
+        maxError: 1
+      }).map(function(pt) {
+        return pt.set('class', classValue);
+      })
+    )
+  );
+
+  return points;
+};
+
+// Initialize an empty collection to store the auxiliary samples
+var Complementary_samples = ee.FeatureCollection([]);
+
+// Generate and merge auxiliary samples from manually drawn polygons.
+// Each line follows the structure:
+// generatePoints(class_id, polygon_collection, number_of_samples)
+Complementary_samples = Complementary_samples
+  .merge(generatePoints( 3, Forest, 500))
+  .merge(generatePoints( 4, Woodland, 500))
+  .merge(generatePoints( 5, Mangrove, 500))
+  .merge(generatePoints( 66, Shrubland, 500))
+  .merge(generatePoints( 21, PastureAgriculture, 500))
+  .merge(generatePoints( 9, ForestPlantation, 500))
+  .merge(generatePoints( 24, Urban, 500))
+  .merge(generatePoints( 25, OtherNonVegetated, 500))
+  .merge(generatePoints( 33, Water, 500))
+  .merge(generatePoints( 34, Glacier, 500));
+
+// Print the number of auxiliary samples per class
+print('Complementary_samples per class',
+      Complementary_samples.aggregate_histogram('class'));
+
+// Define the folder where the stable samples are stored
+var sample_folder = 'projects/mapbiomas-drc/assets/LAND-COVER/COLLECTION-1/GENERAL/SAMPLES/';
+
+// Define the input stable sample collection name
+var stable_samples_name_in = 'filteredSamples_spectralLib_2ndWS_';
+
+// Define the folder where the classifications will be exported 
+var class_folder = 'projects/mapbiomas-drc/assets/LAND-COVER/COLLECTION-1/GENERAL/classification_2ndWS/';
+
+// Define the output classification name
+var classification_name_out = 'classification';
+
+// Read the DRC classification regions.
+var region_training = ee.FeatureCollection(
+  'projects/mapbiomas-drc/assets/LAND-COVER/COLLECTION-1/GENERAL/SAMPLES/drc_regions_training'
+);
+
+// Filter the classification regions to select only the region of interest.
+var region_limit = region_training
+  .filter(ee.Filter.eq('name', region_name));
+
+// Load the Landsat mosaic collection for the DRC
+var Land_collection = ee.ImageCollection('projects/nexgenmap/MapBiomas2/LANDSAT/DRC/mosaics-2');
+
+// Define visualization parameters for the Landsat mosaics
+var visLandsat = {"bands": ["swir1_median", "nir_median", "red_median"],"min": 0, "max": 5615, "gamma":1};
+
+// Initialize the Random Forest classifier
+var classifier = ee.Classifier.smileRandomForest({
+    'numberOfTrees': ntree
+});
+
+// Load the MapBiomas palette module for visualization.
+var palettes = require('users/mapbiomas/modules:Palettes.js');
+
+// Define visualization parameters for the land use and land cover classification
+var visLULC = {'min': 0,'max': 69,'palette': palettes.get('classification9')};
+
+// Create an empty image to store recipe information if needed in later steps
+var recipe = ee.Image([]);
+
+// Loop through each year to train, apply, and export the annual classifier
+years.forEach(function(year) {
+
+    // Read and clip the Landsat mosaic for the current year
+    var Landsat_annual_mosaic = Land_collection.filter(ee.Filter.eq('year', year)).mosaic().clip(region_limit);
+    
+    // Extract spectral information from the auxiliary sample points
+    var trainedComplementary_samples = Landsat_annual_mosaic.reduceRegions({
+        'collection': Complementary_samples, 
+        'reducer': ee.Reducer.first(), 
+        'scale': 30,
+      });
+    
+    // Remove auxiliary samples with missing spectral values.
+    trainedComplementary_samples = trainedComplementary_samples
+      .filter(ee.Filter.notNull(['red_median']));
+    
+     // Read the stable training samples for the current year
+    var StabletrainedSamples = ee.FeatureCollection(sample_folder + stable_samples_name_in + region_name + '_' + year + '_v' + stable_samples_version_in);
+
+    // Merge stable samples with complementary samples
+    var totalTrainedSamples = StabletrainedSamples.merge(trainedComplementary_samples);
+  
+    // Train the Random Forest classifier using the combined training samples
+    classifier = classifier.train({
+      'features': totalTrainedSamples, 
+      'classProperty': 'class', 
+      'inputProperties': Landsat_annual_mosaic.bandNames()
+      }
+    );
+  
+  // Print variable importance if model inspection is needed.
+  // print('Variable importance [' + year + ']', classifier.explain());
+  
+  // Apply the trained Random Forest classifier to the annual Landsat mosaic
+  var classification = Landsat_annual_mosaic.classify(classifier);
+  
+  // Display the Landsat mosaic for the current year.
+  Map.addLayer(Land_collection.filter(ee.Filter.eq('year', year)).filterBounds(region_limit).mosaic().clip(region_limit), visLandsat, 'Landsat ' + year, false);
+  
+  // Display the annual classification.
+  Map.addLayer(classification, visLULC,'LULC RF classification ' + year, true);
+  
+  // Add metadata to the annual classification image.
+  classification = classification.set({'version': classification_version_out})
+                                 .set({'year': year})
+                                 .set({'region': region_name});
+  
+  // Define the annual output classification name
+  var class_name = country_name + '_' + classification_name_out + '_' + region_name + '_' + year + '_v' + classification_version_out ;
+  print(class_name);
+  
+  // Export the annual classification as a Google Earth Engine asset
+  Export.image.toAsset({
+      "image": classification.rename('classification_' + year),
+      "description": class_name,
+      "assetId": class_folder + class_name,
+      "scale": 30,
+      "pyramidingPolicy": {
+          '.default': 'mode'
+      },
+      "maxPixels": 1e13,
+      "region": region_limit
+  }); 
+
+});
+
+
+// Define the grid cell size in meters.
+var proj = ee.Projection('EPSG:4326').atScale(gridSize);
+var grid = region_limit.geometry().coveringGrid(proj, gridSize); 
+Map.addLayer(ee.Image().paint(grid, 0.5, 0.7), {palette: ['brown']}, 'Sampling Grid');
