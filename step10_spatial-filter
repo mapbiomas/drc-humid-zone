@@ -1,0 +1,264 @@
+// SPATIAL FILTER
+ 
+// This filter removes small isolated patches from each annual classification band.
+// It identifies connected patches smaller than or equal to a defined threshold and replaces them with the local modal class.
+
+// Set the country name used in the input and output image names.
+var country_name = 'DRC';
+
+// Set the region name used in the input and output image names.
+var region_name = 'Humid';
+
+// Set the input temporal filter version. 
+var temporal_version_in = '2';
+
+// Set the output spatial filter version.
+var spatial_version_out = '2';
+
+// Set the year used only for map visualization.
+var visYear = 2024;
+
+// Set the first year of the temporal series.
+var startYear = 2000;
+
+// Set the last year of the temporal series.
+var endYear = 2025;
+
+// Set the maximum patch size to be replaced by the spatial filter.
+var filterSize = 6;
+
+// Set the maximum patch size evaluated by connectedPixelCount.
+var connectedPixelMaxSize = 100;
+
+// Set whether diagonal pixels should be considered connected.
+var useDiagonalConnectivity = true;
+
+// Set water classes that should be preserved by the spatial filter.
+var waterClasses = [33];
+
+// Set whether water pixels should be protected from the spatial filter.
+var protectWater = true;
+
+// Set the input ImageCollection path.
+var inputCollectionPath = 'projects/mapbiomas-drc/assets/LAND-COVER/COLLECTION-1/GENERAL/classification-ft_2ndWS';
+
+// Set the output ImageCollection path.
+var outputCollectionPath = 'projects/mapbiomas-drc/assets/LAND-COVER/COLLECTION-1/GENERAL/classification-ft_2ndWS';
+
+// Set whether the Landsat mosaic should be displayed for visual interpretation.
+var showLandsatMosaic = true;
+
+// Load the MapBiomas color palette module.
+var palettes = require('users/mapbiomas/modules:Palettes.js');
+
+// Define visualization parameters for the classification.
+var vis = {
+  bands: ['classification_' + visYear],
+  min: 0,
+  max: 69,
+  palette: palettes.get('classification9'),
+  format: 'png'
+};
+
+// Define visualization parameters for the Landsat mosaic.
+var visLandsat = {
+  bands: ['swir1_median', 'nir_median', 'red_median'],
+  min: 0,
+  max: 5615,
+  gamma: 1
+};
+
+// Create a client-side list of years.
+var makeYearList = function(startYear, endYear) {
+  var years = [];
+
+  // Add each year to the list.
+  for (var year = startYear; year <= endYear; year++) {
+    years.push(year);
+  }
+
+  // Return the complete year list.
+  return years;
+};
+
+// Create the standard classification band name.
+var getBandName = function(year) {
+  return 'classification_' + year;
+};
+
+// Create the input image name.
+var getInputImageName = function(country, region, temporalVersion) {
+  return country + '_classification_' + region + '_gapfill_transition_temporal_v' + temporalVersion;
+};
+
+// Create the output image name.
+var getOutputImageName = function(country, region, temporalVersion, spatialVersion) {
+  return country + '_classification_' + region + '_gapfill_transition_temporal_spatial_v' + spatialVersion;
+};
+
+// Define the years to be processed.
+var years = makeYearList(startYear, endYear);
+
+// Create the expected band names.
+var bandNames = years.map(function(year) {
+  return getBandName(year);
+});
+
+// Create the input image name.
+var inputImageName = getInputImageName(country_name, region_name, temporal_version_in);
+
+// Create the output image name.
+var outputImageName = getOutputImageName(country_name, region_name, temporal_version_in, spatial_version_out);
+
+// Load the input multiband classification image.
+var classificationInput = ee.Image(inputCollectionPath + '/' + inputImageName).select(bandNames).byte();
+
+// Print the input image.
+print('Input classification', classificationInput);
+
+// Print the input band names.
+print('Input bands', classificationInput.bandNames());
+
+// Load the Landsat mosaic collection for visual interpretation.
+var landsatCollection = ee.ImageCollection('projects/nexgenmap/MapBiomas2/LANDSAT/DRC/mosaics-1');
+
+// Display the Landsat mosaic for the selected visualization year.
+if (showLandsatMosaic) {
+  Map.addLayer(
+    landsatCollection.filter(ee.Filter.eq('year', visYear)).mosaic(),
+    visLandsat,
+    'Landsat mosaic - ' + visYear,
+    false
+  );
+}
+
+// Display the full input image to allow temporal inspection.
+Map.addLayer(classificationInput, vis, 'Before spatial filter - ' + region_name + ' - ' + visYear, false);
+
+// Create a binary mask for a list of classes.
+var makeClassMask = function(image, classList) {
+  var mask = image.eq(classList[0]);
+
+  // Add the remaining classes to the mask.
+  classList.slice(1).forEach(function(classValue) {
+    mask = mask.or(image.eq(classValue));
+  });
+
+  // Return the binary class mask.
+  return mask;
+};
+
+// Define the focal mode kernel according to the connectivity setting.
+var modeKernel = ee.Algorithms.If(
+  useDiagonalConnectivity,
+  ee.Kernel.square({
+    radius: 1,
+    units: 'pixels',
+    normalize: false
+  }),
+  ee.Kernel.plus({
+    radius: 1,
+    units: 'pixels',
+    normalize: false
+  })
+);
+
+// Convert the conditional kernel object to an Earth Engine kernel.
+modeKernel = ee.Kernel(modeKernel);
+
+// Apply the spatial filter to one annual band.
+var applySpatialFilterToYear = function(image, year) {
+  // Create the current year band name.
+  var bandName = getBandName(year);
+
+  // Select the current year classification.
+  var current = image.select(bandName);
+
+  // Fill masked pixels with zero only for neighborhood and patch-size operations.
+  var currentUnmasked = current.unmask(0);
+
+  // Compute the local modal class using the selected neighborhood kernel.
+  var focalMode = currentUnmasked.focal_mode({
+    kernel: modeKernel
+  });
+
+  // Count connected pixels with the same class using the selected connectivity rule.
+  var connections = currentUnmasked.connectedPixelCount({
+    maxSize: connectedPixelMaxSize,
+    eightConnected: useDiagonalConnectivity
+  });
+
+  // Identify small connected patches.
+  var smallPatchMask = connections.lte(filterSize);
+
+  // Identify water pixels that should be preserved.
+  var waterMask = makeClassMask(currentUnmasked, waterClasses);
+
+  // Remove water pixels from the correction mask when water protection is enabled.
+  var correctionMask = ee.Image(ee.Algorithms.If(
+    protectWater,
+    smallPatchMask.and(waterMask.not()),
+    smallPatchMask
+  ));
+
+  // Use the local modal class only over pixels selected for correction.
+  var replacement = focalMode.updateMask(correctionMask);
+
+  // Replace small patches with the local modal class.
+  var filtered = currentUnmasked.blend(replacement);
+
+  // Enforce original water pixels after filtering when water protection is enabled.
+  filtered = ee.Image(ee.Algorithms.If(
+    protectWater,
+    filtered.where(waterMask, currentUnmasked),
+    filtered
+  ));
+
+  // Restore nodata as mask and return the corrected annual band.
+  filtered = filtered.updateMask(filtered.neq(0)).rename(bandName).byte();
+
+  // Return the filtered band.
+  return filtered;
+};
+
+// Apply the spatial filter across all annual bands.
+var filteredBands = years.map(function(year) {
+  return applySpatialFilterToYear(classificationInput, year);
+});
+
+// Convert the filtered annual bands into a multiband image.
+var filtered = ee.ImageCollection.fromImages(filteredBands).toBands().rename(bandNames).byte();
+
+// Store metadata in the spatial-filtered image.
+filtered = filtered
+  .set('country', country_name)
+  .set('region', region_name)
+  .set('version', spatial_version_out)
+  .set('temporal_version', temporal_version_in)
+  .set('filter', 'spatial')
+  .set('input_collection', inputCollectionPath)
+  .set('input_asset', inputImageName)
+  .set('output_collection', outputCollectionPath);
+
+// Print the output image.
+print('Output classification', filtered);
+
+// Print the output band names.
+print('Output bands', filtered.bandNames());
+
+// Display the full output image to allow temporal inspection.
+Map.addLayer(filtered, vis, 'After spatial filter - ' + region_name + ' - ' + visYear, true);
+
+// Create the full output asset ID.
+var outputAssetId = outputCollectionPath + '/' + outputImageName;
+
+// Export the spatial-filtered image.
+Export.image.toAsset({
+  image: filtered,
+  description: outputImageName,
+  assetId: outputAssetId,
+  pyramidingPolicy: { '.default': 'mode' },
+  region: classificationInput.geometry(),
+  scale: 30,
+  maxPixels: 1e13
+});
