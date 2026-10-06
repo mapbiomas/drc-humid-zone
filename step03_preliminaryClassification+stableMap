@@ -1,0 +1,236 @@
+// PRELIMINARY CLASSIFICATION AND STABLE MAP GENERATION
+
+// This script uses annual spectral training samples to generate preliminary
+// Random Forest classifications for each year. The annual classifications are
+// then stacked into a multiband image to identify pixels that remained in the
+// same class across the entire temporal series. These stable pixels can be used
+// to refine and expand the training sample set in later processing steps.
+
+// Define the country name
+var country_name = 'DRC'; 
+
+// Define the classification region name 
+var region_name = 'Humid';
+
+// Define the spectral Landsat bands used as predictor variable
+var bands = [
+      'red_median','green_stdDev','green_median','blue_median',
+      'nir_median','swir1_median','swir2_median',
+      'evi2_median_dry','evi2_median_wet','evi2_stdDev',
+      'ndvi_median_dry','ndvi_median_wet','ndvi_stdDev',
+      'ndwi_median_dry','ndwi_median_wet','ndwi_stdDev',
+      'slope'];
+
+// Define the years to be processed
+var years = [
+  2000, 2001, 2002, 2003, 2004, 2005, 2006, 2007, 2008,
+  2009, 2010, 2011, 2012, 2013, 2014, 2015, 2016, 2017,
+  2018, 2019, 2020, 2021, 2022, 2023, 2024, 2025
+];
+
+// Define the folder where the annual spectral training samples were stored - generated in step02
+var sample_folder = 'projects/mapbiomas-drc/assets/LAND-COVER/COLLECTION-1/GENERAL/SAMPLES';
+
+// Define the input training sample file name and version
+var sample_file_name_in = 'filteredSamples_spectralLib';
+var sample_version_in = '11';
+
+// Define the output stable pixel map file name and version
+var stable_file_name_out = 'Stable_Map_2ndWS';
+var stable_version_out = '11';
+
+// Read the training regions for the DRC
+var region_training = ee.FeatureCollection('projects/mapbiomas-drc/assets/LAND-COVER/COLLECTION-1/GENERAL/SAMPLES/drc_regions_training');
+
+// Print the available training region names
+print(region_training.aggregate_array('name')); 
+
+// Filter the training regions to select only the region of interest
+var region_limit = region_training
+    .filter(ee.Filter.eq('name', region_name));
+
+// Show the selected region of interest
+Map.addLayer(region_limit, {}, 'Region Limit', false);
+
+// Load the Landsat mosaic collection for the DRC
+var Land_collection = ee.ImageCollection('projects/nexgenmap/MapBiomas2/LANDSAT/DRC/mosaics-2');
+
+// Define visualization parameters for the Landsat mosaics
+var visLandsat = {
+  "bands": ["swir1_median", "nir_median", "red_median"],
+  "min": 0, "max": 5615, "gamma":1
+  };
+
+// Show the Landsat mosaic for the first and last years of the temporal series
+Map.addLayer(Land_collection.filter(ee.Filter.eq('year', 2000)).filterBounds(region_limit).mosaic(), {"bands": ["swir1_median", "nir_median", "red_median"],"min": 0, "max": 5615, "gamma":1}, 'Landsat 2000 - Median');
+Map.addLayer(Land_collection.filter(ee.Filter.eq('year', 2025)).filterBounds(region_limit).mosaic(), {"bands": ["swir1_median", "nir_median", "red_median"],"min": 0, "max": 5615, "gamma":1}, 'Landsat 2025 - Median', false);
+
+// Initialize the Random Forest classifier
+var classifier = ee.Classifier.smileRandomForest({
+    'numberOfTrees': 10
+});
+
+// Load the MapBiomas palette module for visualization
+var palettes = require('users/mapbiomas/modules:Palettes.js');
+
+// Define visualization parameters for the land use and land cover classification
+var visLULC = {'min': 0,'max': 69,'palette': palettes.get('classification9')};
+
+// Since now we read one isolated training file per year, the training samples
+// will be loaded inside the yearly loop using the pattern:
+// filteredSamples_spectralLib_Mosaic_<YEAR>_v1
+// Based in expertise and field knowledgemnt, perform a empirical balacing in the number of samples for each class 
+
+// Define the empirical sample balance by class.
+// Each list item follows the structure:
+// [class_id, maximum_number_of_samples]
+var balance_samples = [
+  [3,500],  // Forest Formation
+  [4,500],  // Woodland
+  [5,500],  // Mangrove
+  [66,500], // Shrublands
+  [21,500], // Pasture and Agriculture
+  [9,500],  // Forest Plantation
+  [24,250], // Urban Area
+  [25,500], // Other non vegetated area
+  [33,500], // Water
+  [34,500], // Glacier
+];
+
+// Since the balacing performs a subset of the samples and the GEE select them 
+// by the order in which it were collected, we need to shuffle the samples 
+// to avoid that the classifier use samples only from few polygons
+// The shuffle ensure that samples of all polygons will be used
+
+// The shuffle step reduces the effect of spatial ordering in the sample dataset.
+// This helps avoid selecting samples only from a limited set of polygons when
+// the class-level sample limit is applied
+
+// Define a function to shuffle a feature collection using a random seed.
+var shuffle = function (collection, seed) {
+  // add a random index in each feature (sample) and reorder it 
+    collection = collection.randomColumn('random', seed || 1)
+        .sort('random', true)
+        .map(function (feature) {
+                var rescaled = ee.Number(feature.get('random')).multiply(1000000000).round();
+                return feature.set('new_id', rescaled)});
+    var randomIdList = ee.List(collection.reduceColumns(ee.Reducer.toList(), ['new_id']).get('list'));
+    var sequentialIdList = ee.List.sequence(1, collection.size());
+    var shuffled = collection.remap(randomIdList, sequentialIdList, 'new_id');
+    return shuffled;
+};
+
+// Create an empty client-side list to store the annual classification images
+var classifiedList = [];
+
+// Loop through each year to train and apply the annual classifier
+years.forEach(
+  function (year) {
+  
+  // Read the annual spectral training samples for the current year
+  var trainedSamples_year = ee.FeatureCollection(
+      sample_folder + '/' +
+      sample_file_name_in + '_' +
+      region_name + '_' +
+      year + '_v' +
+      sample_version_in
+    );
+
+  print('Training samples for year ' + year, trainedSamples_year.size());
+  
+  // Create an empty feature collection to store the balanced annual samples
+  var balanced_trainedSamples = ee.FeatureCollection([]);
+  
+  // Apply empirical class balancing to the annual training samples
+  balance_samples.forEach(
+      function (class_and_samples) {
+        
+        // Filter the annual samples by class
+        var sample = trainedSamples_year.filter(ee.Filter.eq('class',class_and_samples[0]));
+        
+        // Shuffle the samples and limit the number of samples for the class
+        // Empty classes are skipped to avoid errors during collection merging
+        var safeSample = ee.FeatureCollection(
+          ee.Algorithms.If(
+            sample.size().gt(0),
+            shuffle(sample, 2).limit(class_and_samples[1]),
+            ee.FeatureCollection([])
+          )
+        );
+        
+        // Merge the balanced class subset into the annual training collection
+        balanced_trainedSamples = balanced_trainedSamples.merge(safeSample);
+      }
+  );
+
+  print ('Number of balanced samples ' + year, balanced_trainedSamples.size());
+  
+  // Read and prepare the Landsat mosaic for the current year
+  var Landsat_annual_mosaic = Land_collection
+      .filter(ee.Filter.eq('year', year))
+      .mosaic()
+      .select(bands);
+
+  // Train the Random Forest classifier using the balanced annual samples
+  classifier = classifier.train({
+    'features': balanced_trainedSamples, 
+    'classProperty': 'class', 
+    'inputProperties': bands
+      });
+  
+  // Apply the trained classifier to the annual Landsat mosaic
+  var classification = Landsat_annual_mosaic.clip(region_limit).classify(classifier).rename('classification_'+year);
+  
+   // Store the annual classification image in the classification list
+  classifiedList.push(classification);
+
+  // Display the annual preliminary classification
+  Map.addLayer(classification, visLULC, 'LULC RF classification '+ year, false);
+  }
+);
+
+// Stack the annual classifications into a single multiband image
+var classifiedStack = ee.Image(classifiedList);
+
+// Define a function to count the number of distinct classes across the time series
+var calculateNumberOfClasses = function (image) {
+    var nClasses = image.reduce(ee.Reducer.countDistinctNonNull());
+    return nClasses.rename('number_of_classes');
+};
+
+// Count the number of distinct classes observed for each pixel
+var nClasses = calculateNumberOfClasses(classifiedStack);
+
+// Select pixels that remained in the same class across all years (e.g forest all the years) 
+var stable = classifiedStack.select(0).multiply(nClasses.eq(1)).selfMask();
+
+// Visualizer stable pixels 
+Map.addLayer(stable, visLULC, 'Stable', true);
+
+// Add metadata to the stable pixel image
+stable = stable
+    .rename('stable')
+    .set('collection_id', 1.0)
+    .set('version', stable_version_out)
+    .set('territory', region_name);
+
+// Define the output asset name
+var stableName = country_name + '_' +
+  stable_file_name_out + '_' +
+  region_name + '_v' +
+  stable_version_out;
+
+print(stableName);
+
+// Export the stable pixel map as a Google Earth Engine asset
+Export.image.toAsset({
+    "image": stable,
+    "description": stableName,
+    "assetId": sample_folder + '/' + stableName,
+    "scale": 30,
+    "pyramidingPolicy": {
+        '.default': 'mode'
+    },
+    "maxPixels": 1e13,
+    "region": region_limit
+});
