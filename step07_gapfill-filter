@@ -1,0 +1,234 @@
+// GAPFILL FILTER
+
+// This filter fills missing pixels across the temporal classification series.
+// It first applies a forward fill using the most recent valid previous year, 
+// then a backward fill using the next valid year for remaining gaps.
+
+// Define the name of the country 
+var country_name = 'DRC';
+
+// Define the name of the region 
+var region_name = 'Humid';
+
+// Define the version of the classification  
+var classification_version = '11'; 
+
+// Define the version of the filter 
+var gap_version_out = '2';
+
+// Set the year used only for map visualization.
+var visYear = '2000';
+
+// Define the years to be processed
+var years = [
+  2000, 2001, 2002, 2003, 2004, 2005, 2006, 2007, 2008,
+  2009, 2010, 2011, 2012, 2013, 2014, 2015, 2016, 2017,
+  2018, 2019, 2020, 2021, 2022, 2023, 2024, 2025
+];
+
+// Input and output collections
+var inputCollectionPath = 'projects/mapbiomas-drc/assets/LAND-COVER/COLLECTION-1/GENERAL/classification_2ndWS';
+var outputCollectionPath = 'projects/mapbiomas-drc/assets/LAND-COVER/COLLECTION-1/GENERAL/classification-ft_2ndWS';
+
+// Define visualization parameters
+var palettes = require('users/mapbiomas/modules:Palettes.js');
+
+var vis = {
+  'min': 0,
+  'max': 69,
+  'palette': palettes.get('classification9'),
+  'bands': 'classification_' + visYear,
+};
+
+// Create the standard input image name from country, region, year, and version.
+var getInputImageName = function(country, region, year, version) {
+    return country + '_classification_' + region + '_' + year + '_v' + version;
+};
+
+// Create the standard output image name for the gap-filled multiband image.
+var getOutputImageName = function(country, region, version) {
+    return country + '_classification_' + region + '_gapfill_v' + version;
+};
+
+// Create the standard classification band name for each year.
+var getBandName = function(year) {
+    return 'classification_' + year;
+};
+
+// Load one annual classification image from the input collection.
+var loadAnnualImage = function(year) {
+    // Create the expected input image name for the selected year.
+    var imageName = getInputImageName(country_name, region_name, year, classification_version);
+
+    // Load the annual image using its full asset path.
+    var image = ee.Image(inputCollectionPath + '/' + imageName);
+
+    // Create the expected classification band name for the selected year.
+    var bandName = getBandName(year);
+
+    // Select the annual classification band when it already follows the expected name.
+    var annualImage = ee.Image(ee.Algorithms.If(
+        image.bandNames().contains(bandName),
+        image.select([bandName]),
+        ee.Algorithms.If(
+            image.bandNames().contains('classification'),
+            image.select(['classification']).rename([bandName]),
+            image.select([0]).rename([bandName])
+        )
+    ));
+
+    // Convert the annual classification to byte and store basic metadata.
+    return annualImage.byte()
+        .set('country', country_name)
+        .set('region', region_name)
+        .set('year', year)
+        .set('version', classification_version)
+        .set('image_name', imageName);
+};
+
+// Build a multiband temporal image with one classification band per year.
+var buildTemporalImage = function(yearsList) {
+    // Load the first year as the initial temporal image.
+    var temporalImage = loadAnnualImage(yearsList[0]);
+
+    // Add each remaining annual image as a new temporal band.
+    yearsList.slice(1).forEach(function(year) {
+        temporalImage = temporalImage.addBands(loadAnnualImage(year));
+    });
+
+    // Return the full temporal classification image.
+    return temporalImage;
+};
+
+// Build the temporal input image from the annual classification assets.
+var classification = buildTemporalImage(years);
+
+// Create the expected list of classification band names.
+var bandNames = years.map(function(year) {
+    return getBandName(year);
+});
+
+// Create a list of band indexes used during temporal iteration.
+var yearsIndex = ee.List.sequence(0, years.length - 1);
+
+// Print the input temporal image for inspection.
+print('Input classification', classification);
+
+// Print the input band names for inspection.
+print('Input bands', classification.bandNames());
+
+// Fill one annual band using the previous already-filled temporal band.
+var gapFill = function(currentYearIndex, obj) {
+    // Convert the iteration object to an Earth Engine dictionary.
+    obj = ee.Dictionary(obj);
+
+    // Get the previous year index in the temporal sequence.
+    var previousYearIndex = ee.Number(currentYearIndex).subtract(1);
+
+    // Get the image that stores the filled bands accumulated so far.
+    var imageFilled = ee.Image(obj.get('image_filled'));
+
+    // Get the original image used as the base for the current temporal band.
+    var imageBase = ee.Image(obj.get('image_base'));
+
+    // Select the current annual classification band.
+    var currentImage = imageBase.select([ee.Number(currentYearIndex)]);
+
+    // Select the previous annual band already filled.
+    var previousImageFilled = imageFilled.select([previousYearIndex]);
+
+    // Fill masked pixels in the current band using the previous filled band.
+    var currentFilled = currentImage.unmask(previousImageFilled);
+
+    // Add the newly filled current band to the accumulated temporal image.
+    return obj.set('image_filled', imageFilled.addBands(currentFilled));
+};
+
+// Apply forward fill from the oldest year to the most recent year.
+var forwardFill = function(image) {
+    // Select the first year as the initial filled image.
+    var first = image.select([0]);
+
+    // Iterate over the remaining years and fill gaps using the previous filled band.
+    var result = yearsIndex.slice(1).iterate(gapFill, { image_filled: first, image_base: image });
+
+    // Return the temporal image after forward fill.
+    return ee.Image(ee.Dictionary(result).get('image_filled'));
+};
+
+// Apply backward fill from the most recent year to the oldest year.
+var backwardFill = function(image) {
+    // Reverse the temporal band index order.
+    var reversedIndex = yearsIndex.reverse();
+
+    // Reorder the image bands from the most recent year to the oldest year.
+    var reversedImage = image.select(reversedIndex);
+
+    // Select the most recent year as the initial filled image in the reversed sequence.
+    var last = reversedImage.select([0]);
+
+    // Iterate over the reversed series and fill gaps using the next valid year.
+    var result = yearsIndex.slice(1).iterate(gapFill, { image_filled: last, image_base: reversedImage });
+
+    // Restore the original chronological band order.
+    return ee.Image(ee.Dictionary(result).get('image_filled')).select(reversedIndex);
+};
+
+// Mask zero values before applying the temporal gap fill.
+var classificationMasked = classification.selfMask();
+
+// Apply the forward fill step.
+var forwardFilled = forwardFill(classificationMasked);
+
+// Apply the backward fill step and restore the expected band names.
+var gapFilled = backwardFill(forwardFilled).rename(bandNames).byte();
+
+// Set metadata for the final multiband gap-filled image.
+gapFilled = gapFilled
+    .set('country', country_name)
+    .set('region', region_name)
+    .set('version', gap_version_out)
+    .set('source_version', classification_version)
+    .set('filter', 'gapfill')
+    .set('years', years)
+    .set('input_collection', inputCollectionPath)
+    .set('output_collection', outputCollectionPath);
+
+// Print the final gap-filled image for inspection.
+print('Output classification', gapFilled);
+
+// Print the output band names for inspection.
+print('Output bands', gapFilled.bandNames());
+
+// Display the original classification for the selected visualization year.
+Map.addLayer(classification.select(getBandName(visYear)), vis, 'Before gapfill - ' + region_name + ' - ' + visYear, true);
+
+// Display the gap-filled classification for the selected visualization year.
+Map.addLayer(gapFilled.select(getBandName(visYear)), vis, 'After gapfill - ' + region_name + ' - ' + visYear, true);
+
+// Create the output image name for the region-level multiband image.
+var outputImageName = getOutputImageName(country_name, region_name, gap_version_out);
+
+// Create the full output asset ID inside the output ImageCollection.
+var outputAssetId = outputCollectionPath + '/' + outputImageName;
+
+// Set the system index using the output image name.
+gapFilled = gapFilled.set('system:index', outputImageName);
+
+// Export one multiband image for the selected region.
+Export.image.toAsset({
+    image: gapFilled,
+    description: outputImageName,
+    assetId: outputAssetId,
+    pyramidingPolicy: { '.default': 'mode' },
+    region: gapFilled.geometry().bounds(),
+    scale: 30,
+    maxPixels: 1e13
+});
+
+// Import the DRC classification regions 
+var region_training = ee.FeatureCollection('projects/mapbiomas-drc/assets/LAND-COVER/COLLECTION-1/GENERAL/SAMPLES/drc_regions_training');
+
+// Filter only the region of interest 
+var region_limit = region_training.filter(ee.Filter.eq('name', region_name));
+Map.addLayer(region_limit, {}, 'Region', false);  // Add region to the map 
